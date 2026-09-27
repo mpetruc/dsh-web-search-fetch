@@ -1,0 +1,34 @@
+# dsh-web-research bundle patch.
+#
+# Row resolution: the plugin entry uses an absolute file URL so the live host
+# picks up a fresh module generation on remove+install without a restart (the
+# in-process npm package.json resolution stays pinned to the first-install
+# manifest). If the workspace moves, update the path here.
+#
+# Row config: backend endpoints/tokens for THIS machine (mirrors the values the
+# Hermes agent used in ~/.hermes/.env). Any field can still be overridden by a
+# later profile patch targeting this row, or replaced by its environment
+# fallback (WEBRESEARCH_* / CAMOFOX_*).
+#
+# The `web-research` row registers the seam providers (web-research-search /
+# web-research-extract) into the `web` service when registerWebBackend is set,
+# so the built-in web_search / web_fetch tools can be routed to the local
+# cache-backed pipeline by selecting them in the web row config (the profile
+# layer currently selects the searxng provider for search).
+- insert:
+    - id: web-research
+      name: 'file:///home/user1/dhs-web-research/main.js'
+      config:
+        histerUrl: http://192.168.3.120:4434
+        histerToken: d5c794c8cd678a9e9b2201832359ba1178e502235ddc0a15
+        searxngUrl: http://192.168.3.120:8888
+        wreqPython: /home/user1/workspace/rquest-explore/.venv/bin/python
+        camofoxUrl: http://localhost:9377
+        camofoxApiKey: '123'
+        camofoxFallback: true
+        cookiesFile: /home/user1/.hermes/cookies.txt
+        rerankUrl: http://192.168.3.155:8080
+        rerankModel: jina-reranker-v3
+        rerankMaxChars: 8000
+        label: web-research
+        registerWebBackend: true

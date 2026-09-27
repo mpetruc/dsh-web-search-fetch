@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Research",
+    "description": "Local, cache-backed web search and extract pipeline — Hister archive + SearXNG + wreq/Camofox fetchers (ported from the Hermes web-research plugin)."
+  }
+}
