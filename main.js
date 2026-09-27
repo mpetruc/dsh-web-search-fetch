@@ -9,18 +9,53 @@
 // (search/extract providers) that plug the same pipeline behind the built-in
 // web_search / web_fetch tools when `registerWebBackend` is enabled.
 //
-// Config precedence per field: row `config` > process env > Python default.
-// Every backend setting from the Hermes plugin keeps its WEBRESEARCH_* /
-// CAMOFOX_* environment-variable contract, so an existing Hermes environment
-// works without any row config.
+// Config precedence per field: row `config` > process env > `<bundleDir>/.env`
+// > Python default. Every backend setting from the Hermes plugin keeps its
+// WEBRESEARCH_* / CAMOFOX_* environment-variable contract, so an existing
+// Hermes environment works without any row config, and a `.env` file next to
+// this bundle carries machine-specific values without committing them.
 
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLI_PATH = path.join(__dirname, 'python', 'webresearch', 'cli.py')
+
+/**
+ * Load `<bundleDir>/.env` (or the file named by DSH_WEBRESEARCH_ENV_FILE) into
+ * process.env ahead of config resolution. Existing process environment always
+ * wins; the row `config` overrides both in resolve(). Values may be double- or
+ * single-quoted; `#` starts a comment line.
+ */
+function loadDotEnv() {
+  const file = process.env.DSH_WEBRESEARCH_ENV_FILE || path.join(__dirname, '.env')
+  if (!existsSync(file)) return
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {
+    return
+  }
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line)
+    if (!match) continue
+    const key = match[1]
+    if (process.env[key] !== undefined) continue
+    let value = match[2].trim()
+    if (value.length >= 2) {
+      const first = value[0]
+      if (value[value.length - 1] === first && (first === '"' || first === "'")) {
+        value = value.slice(1, -1)
+      }
+    }
+    process.env[key] = value
+  }
+}
+loadDotEnv()
 
 /** Row config keys and the environment variable each falls back to. */
 const ENV_MAP = {

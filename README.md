@@ -31,23 +31,31 @@ counts) and log structured lines to `~/.dsh/logs/web-research.log`.
 
 ## Configuration
 
-Config precedence per field: **row `config` > process env > Python default**.
-The inserted row ships `config: {}`, so an existing Hermes environment works
-unchanged (`WEBRESEARCH_HISTER_URL`, `WEBRESEARCH_HISTER_TOKEN`,
-`WEBRESEARCH_SEARXNG_URL`, `WEBRESEARCH_WREQ_PY`, `CAMOFOX_URL`,
-`CAMOFOX_API_KEY`, `WEBRESEARCH_CAMOFOX_FALLBACK`, ...). To pin values in the
-profile instead of the environment, add a profile-patch row (config replaces
-wholesale):
+Backend settings are never committed to the repo — they live in a gitignored
+`.env` file next to the bundle. Copy the template and edit:
+
+```sh
+cp .env.example .env
+```
+
+Config precedence per field: **row `config` > process env > `.env` > Python
+default**. The plugin loads `.env` (or the file named by
+`DSH_WEBRESEARCH_ENV_FILE`) at startup and passes the pipeline its
+`WEBRESEARCH_HISTER_URL`, `WEBRESEARCH_HISTER_TOKEN`, `WEBRESEARCH_SEARXNG_URL`,
+`WEBRESEARCH_WREQ_PY`, `CAMOFOX_URL`, `CAMOFOX_API_KEY`,
+`WEBRESEARCH_CAMOFOX_FALLBACK`, ... contract, so an existing Hermes environment
+or a `.env` file works unchanged. To pin values in the profile instead of the
+environment, add a profile-patch row (config replaces wholesale):
 
 ```yaml
 - id: web-research
   name: '@local/dsh-web-research'
   config:
-    histerUrl: http://192.168.3.120:4434
+    histerUrl: http://127.0.0.1:4434
     histerToken: <token>
-    searxngUrl: http://192.168.3.120:8888
-    wreqPython: /home/user1/workspace/rquest-explore/.venv/bin/python
-    camofoxUrl: http://192.168.3.120:9377
+    searxngUrl: http://127.0.0.1:8888
+    wreqPython: /path/to/wreq-venv/bin/python
+    camofoxUrl: http://127.0.0.1:9377
     camofoxFallback: true
 ```
 
@@ -100,7 +108,7 @@ bundle layer) in the profile patch:
 
 ```
 index.js              Host plugin: tools, system-prompt guidance, seam adapters
-cordis.patch.yml      bundle patch (one insert row with the backend config baked in)
+cordis.patch.yml      bundle patch (one insert row; backend settings via .env)
 python/webresearch/   ported pipeline + cli.py
 locale/en.json        display metadata
 ```

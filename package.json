@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-web-research",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Local, cache-backed web search and extract pipeline (Hister archive + SearXNG + wreq / Camofox fetchers), ported from the Hermes web-research plugin.",
