@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-web-research — Architecture &amp; Flow Report</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f4f6f9; color: #0f172a; line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 36px 30px 90px; }
+  header.hero {
+    background: linear-gradient(135deg, #1e293b, #334155);
+    color: #f1f5f9; border-radius: 14px; padding: 30px 34px; margin-bottom: 26px;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 28px; letter-spacing: .2px; }
+  header.hero p { margin: 6px 0; color: #cbd5e1; font-size: 15px; max-width: 1000px; }
+  header.hero .tag {
+    display: inline-block; background: #475569; color: #e2e8f0; border-radius: 999px;
+    padding: 2px 10px; font-size: 12px; margin-right: 6px; margin-top: 8px;
+  }
+  nav.toc {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 14px 20px; margin-bottom: 28px; font-size: 14px;
+  }
+  nav.toc a { color: #1d4ed8; text-decoration: none; margin-right: 16px; white-space: nowrap; }
+  nav.toc a:hover { text-decoration: underline; }
+  h2 {
+    font-size: 22px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;
+    margin: 44px 0 16px; color: #0f172a;
+  }
+  h3 { font-size: 17px; margin: 26px 0 8px; color: #1e293b; }
+  p { margin: 10px 0; }
+  .card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 22px; margin: 14px 0;
+  }
+  .callout {
+    background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 6px;
+    padding: 12px 16px; margin: 14px 0; font-size: 14.5px;
+  }
+  .callout.warn { background: #fff7ed; border-left-color: #f59e0b; }
+  svg.diagram {
+    display: block; width: 100%; height: auto; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 1px 3px rgba(15,23,42,.06);
+  }
+  svg text { font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .cap { text-align: center; color: #64748b; font-size: 13px; margin: 8px 0 4px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; font-size: 13.5px; margin: 10px 0; }
+  th, td { border: 1px solid #e2e8f0; padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; font-weight: 600; }
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .92em; background: #f1f5f9; border-radius: 4px; padding: 1px 5px;
+  }
+  .flowline {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    font-size: 14px; margin: 8px 0; font-weight: 600;
+  }
+  .flowline .node {
+    background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+    padding: 7px 14px; white-space: nowrap;
+  }
+  .flowline .node.env { background: #ecfdf5; border-color: #a7f3d0; }
+  .flowline .node.py  { background: #f0fdf4; border-color: #bbf7d0; }
+  .flowline .arrow { color: #64748b; }
+  .kbd-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .kbd {
+    flex: 1 1 240px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px;
+  }
+  .kbd b { display: block; margin-bottom: 4px; font-size: 14px; }
+  .kbd span { font-size: 12.5px; color: #334155; }
+  footer { margin-top: 50px; color: #94a3b8; font-size: 12.5px; text-align: center; }
+  ul.tight li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>dsh-web-research — What it does &amp; how it flows</h1>
+  <p>A <strong>DeepSeek Harness Host plugin</strong> that ports the Hermes-agent <em>web-research</em> plugin: a
+  <strong>local, open-source-first web search and extract pipeline</strong> (Hister archive cache + SearXNG live search +
+  wreq TLS-fingerprint fetcher with Camofox browser fallback), exposed to agents as three tools and two optional
+  <code>ctx.web</code> seam providers.</p>
+  <p>
+    <span class="tag">Repo: @local/dsh-web-research</span>
+    <span class="tag">Node host plugin (stdlib only) + Python subprocess pipeline (stdlib only)</span>
+    <span class="tag">Port of Hermes web-research, no re-invention</span>
+  </p>
+  <p style="margin-top:10px">Report generated from repository exploration &nbsp;·&nbsp; commits: <code>741870a</code> (port), <code>7dbefe3</code> (backend settings → gitignored <code>.env</code>)</p>
+</header>
+
+<nav class="toc">
+  <a href="#s1">1&nbsp;Overview</a>
+  <a href="#s2">2&nbsp;Architecture flow</a>
+  <a href="#s3">3&nbsp;Tool-call runtime</a>
+  <a href="#s4">4&nbsp;web_research pipeline</a>
+  <a href="#s5">5&nbsp;Fetch layer</a>
+  <a href="#s6">6&nbsp;web_read / web_recall</a>
+  <a href="#s7">7&nbsp;ctx.web seam</a>
+  <a href="#s8">8&nbsp;Configuration</a>
+  <a href="#s9">9&nbsp;Data contracts</a>
+  <a href="#s10">10&nbsp;Failure &amp; quality</a>
+  <a href="#s11">11&nbsp;End-to-end narrative</a>
+</nav>
+
+<!-- ================================================================== -->
+<section id="s1">
+<h2>1. What this thing is, in one paragraph</h2>
+<div class="card">
+<p><strong>dsh-web-research</strong> gives DeepSeek Harness agents a private, inspectable, disk-backed web research
+subsystem. Instead of calling an external search API, it drives <em>local</em> components that the Hermes project
+already built:</p>
+<ul class="tight">
+  <li><strong>Hister</strong> — a local archive server storing every ingested page; it also <em>extracts</em> clean text from raw HTML/PDF server-side, so the pipeline stores raw HTML once and re-reads cleaned text on demand.</li>
+  <li><strong>SearXNG</strong> — a meta-search engine JSON endpoint used only for <em>discovery</em> (URLs + snippets, never citable).</li>
+  <li><strong>wreq</strong> — a TLS-fingerprint-rotating HTTP client (separate venv) that fetches pages without looking bot-like.</li>
+  <li><strong>Camofox</strong> — an anti-detect headless browser (REST :9377) used as a fallback for JS-required or Cloudflare-challenged pages.</li>
+</ul>
+<p>The Node host plugin (<code>main.js</code>) registers three agent tools — <code>web_recall</code>, <code>web_research</code>,
+<code>web_read</code> — each of which spawns the Python pipeline (<code>python/webresearch/cli.py</code>) as a subprocess:
+<em>one JSON object on stdin, one JSON document on stdout</em>. All backend settings come from a gitignored <code>.env</code>
+through the <code>WEBRESEARCH_*</code> / <code>CAMOFOX_*</code> contract, so an existing Hermes environment works unchanged.</p>
+</div>
+
+<h3>1.1 Component map</h3>
+<table>
+  <tr><th>File</th><th>Role</th><th>Key details</th></tr>
+  <tr><td><code>package.json</code></td><td>Bundle manifest</td><td>Name <code>@local/dsh-web-research</code>, entry <code>./main.js</code>, declares <code>dsh.bundle.patch</code> → <code>cordis.patch.yml</code>, ships <code>locale/*</code> and <code>python/**</code>. No runtime dependencies.</td></tr>
+  <tr><td><code>cordis.patch.yml</code></td><td>Profile patch (Loader dialect)</td><td>One <code>insert</code> row <code>web-research</code> loading <code>file:///home/user1/dhs-web-research/main.js?v2</code> (the <code>?v2</code> is a generation bump so the live host re-imports the module after remove+install, because Node caches ESM per URL).</td></tr>
+  <tr><td><code>main.js</code></td><td>Host plugin (Node ESM)</td><td>Loads <code>.env</code>; resolves config (row config &gt; process env &gt; <code>.env</code>); registers the 3 tools via <code>ctx.tools.register</code>; registers a <code>systemPrompt</code> section; optionally registers <code>ctx.web</code> search/fetch providers; runs the pipeline via <code>spawn(python3 cli.py &lt;cmd&gt;)</code>.</td></tr>
+  <tr><td><code>python/webresearch/cli.py</code></td><td>Subprocess entry</td><td>Dispatches <code>recall | research | read | search | search_meta | refresh_doc</code>; filters kwargs to the function signature; exit 0 = pipeline ran (even if the JSON carries an <code>error</code>); nonzero = invocation failure.</td></tr>
+  <tr><td><code>python/webresearch/core.py</code></td><td>Pipeline orchestration</td><td>Ports the Hermes stage graph: parallel search, dedupe, cache-first split, refresh loop, failure-shell detection, optional rerank, diversification, structured logging to <code>~/.dsh/logs/web-research.log</code>.</td></tr>
+  <tr><td><code>python/webresearch/clients.py</code></td><td>Backend clients</td><td><code>HisterClient</code> (CLI <code>hister search</code>; <code>GET /api/document</code>; CSRF-handshaked <code>POST /api/add</code>, <code>/api/add_pdf</code>), <code>SearxNGClient</code> (<code>GET /search?format=json</code>, <code>freshness → time_range</code>), <code>RerankClient</code> (<code>POST /v1/rerank</code>).</td></tr>
+  <tr><td><code>python/webresearch/fetch_worker.py</code></td><td>wreq fetch worker</td><td>Runs under the wreq venv; rotates fingerprint profiles <code>Safari18_5 → Safari26 → Chrome131 → Firefox150</code>; writes HTML/PDF to temp files (never stdout); prints one JSON line.</td></tr>
+  <tr><td><code>python/webresearch/camofox.py</code></td><td>Browser-render client</td><td>REST client for the anti-detect browser; cookie injection from a Netscape file; challenge polling (≤25 s); chunked DOM reads (768 KiB slices, bypassing the 1 MiB evaluate cap); raises <code>ManagedChallengeError</code> when a bot-challenge won't clear.</td></tr>
+  <tr><td><code>python/webresearch/quality.py</code></td><td>Result quality</td><td><code>filter_spam()</code> (mirror/SEO-scraper blocklist + <code>WEBRESEARCH_BLOCKED_DOMAINS</code>, allowlist always wins, <code>site:</code> queries bypass) and <code>diversify()</code> (≤ 2 results per registrable domain; overflow moved behind the head, never dropped).</td></tr>
+  <tr><td><code>python/webresearch/errors.py</code></td><td>Typed error taxonomy</td><td>Every stage raises <code>WebResearchError</code> subclasses carrying <code>stage / provider / url</code> for stable, machine-readable diagnostics.</td></tr>
+  <tr><td><code>.env.example</code> / <code>.env</code></td><td>Backend settings</td><td>Gitignored <code>.env</code> next to the bundle carries endpoints/tokens/python paths; <code>.env.example</code> is the committed template.</td></tr>
+  <tr><td><code>locale/en.json</code></td><td>Display metadata</td><td>Title/description shown by the harness UI.</td></tr>
+</table>
+<p class="small">Note: the README “Layout” table still says <code>index.js</code>; the real plugin entry is <code>main.js</code> (per <code>package.json</code> exports and the patch <code>name</code>), and code comments inside <code>main.js</code> call it <code>index.js</code> too. Same file, legacy name.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="s2">
+<h2>2. Architecture flow — how the pieces are wired</h2>
+<svg class="diagram" viewBox="0 0 1160 830" role="img" aria-label="System architecture diagram">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <!-- Row 1: host context -->
+  <rect class="hb" x="40"  y="40" width="260" height="120" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.4"/>
+  <text x="170" y="66" text-anchor="middle" font-weight="700" font-size="15" fill="#0f172a">DeepSeek Harness Host</text>
+  <text x="58"  y="92" font-size="12.5" fill="#1e293b">profile composition (live sessions)</text>
+  <text x="58"  y="112" font-size="12.5" fill="#1e293b">ctx.tools · ctx.web · ctx.systemPrompt</text>
+  <text x="58"  y="132" font-size="12.5" fill="#1e293b">plugin manager mounts bundles</text>
+
+  <rect x="360" y="40" width="300" height="120" rx="10" fill="#fff7ed" stroke="#f59e0b" stroke-width="1.4"/>
+  <text x="510" y="66" text-anchor="middle" font-weight="700" font-size="14.5" fill="#0f172a">cordis.patch.yml — bundle patch</text>
+  <text x="378" y="92" font-size="12.5" fill="#1e293b">insert row:  id = web-research</text>
+  <text x="378" y="112" font-size="12.5" fill="#1e293b">name = file://…/main.js?v2</text>
+  <text x="378" y="132" font-size="12.5" fill="#1e293b">config = { label, registerWebBackend: true }</text>
+
+  <rect x="760" y="40" width="360" height="120" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.4"/>
+  <text x="940" y="66" text-anchor="middle" font-weight="700" font-size="14.5" fill="#0f172a">bundleDir/.env (gitignored)</text>
+  <text x="778" y="92" font-size="12.5" fill="#1e293b">WEBRESEARCH_* · CAMOFOX_* values</text>
+  <text x="778" y="112" font-size="12.5" fill="#1e293b">endpoints, tokens, wreq python path</text>
+  <text x="778" y="132" font-size="12.5" fill="#1e293b">copied from .env.example</text>
+
+  <line x1="300" y1="100" x2="356" y2="100" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="510" y1="160" x2="510" y2="238" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="940" y1="160" x2="940" y2="238" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="516" y="178" font-size="11.5" fill="#64748b">mounts patch → imports entry</text>
+  <text x="948" y="178" font-size="11.5" fill="#64748b">loadDotEnv() from bundleDir/.env</text>
+
+  <!-- Bundle container -->
+  <rect x="340" y="190" width="780" height="450" rx="14" fill="#fbfdff" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="7 5"/>
+  <text x="360" y="214" font-weight="700" font-size="14" fill="#334155">dsh-web-research bundle  (@local/dsh-web-research)</text>
+
+  <!-- main.js -->
+  <rect x="380" y="228" width="700" height="150" rx="10" fill="#fefce8" stroke="#eab308" stroke-width="1.4"/>
+  <text x="730" y="250" text-anchor="middle" font-weight="700" font-size="15" fill="#0f172a">main.js — Host plugin entry (Node ESM · stdlib-only)</text>
+  <text x="398" y="276" font-size="12.5" fill="#1e293b">tools:            web_recall · web_research · web_read    (ctx.tools.register)</text>
+  <text x="398" y="298" font-size="12.5" fill="#1e293b">ctx.web seam:  web-research-search · web-research-extract  (registerWebBackend)</text>
+  <text x="398" y="320" font-size="12.5" fill="#1e293b">systemPrompt:  “tool:web-research” section, order 2050, hidden when tool absent</text>
+  <text x="398" y="342" font-size="12.5" fill="#1e293b">runner:           runPipeline() → spawn python3 cli.py · JSON-in / JSON-out · 240 s timeout</text>
+  <text x="398" y="364" font-size="12.5" fill="#1e293b">seams only when registerWebBackend ∧ histerUrl ∧ histerToken resolve</text>
+
+  <!-- python -->
+  <rect x="380" y="412" width="700" height="200" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.4"/>
+  <text x="400" y="436" font-weight="700" font-size="14" fill="#0f172a">python/webresearch/ — Hermes pipeline port (subprocess)</text>
+
+  <rect x="398" y="452" width="214" height="142" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+  <text x="505" y="474" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">cli.py</text>
+  <text x="414" y="496" font-size="12" fill="#1e293b">stdin: one JSON object</text>
+  <text x="414" y="516" font-size="12" fill="#1e293b">dispatch recall · research</text>
+  <text x="414" y="533" font-size="12" fill="#1e293b">· read · search ·</text>
+  <text x="414" y="550" font-size="12" fill="#1e293b">· search_meta · refresh_doc</text>
+  <text x="414" y="570" font-size="12" fill="#1e293b">stdout: one JSON document</text>
+
+  <rect x="632" y="452" width="214" height="142" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+  <text x="739" y="474" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">core.py</text>
+  <text x="648" y="496" font-size="12" fill="#1e293b">stage orchestration</text>
+  <text x="648" y="516" font-size="12" fill="#1e293b">retry() exp. backoff</text>
+  <text x="648" y="536" font-size="12" fill="#1e293b">cache freshness (10 d)</text>
+  <text x="648" y="556" font-size="12" fill="#1e293b">failure-shell detection</text>
+  <text x="648" y="576" font-size="12" fill="#1e293b">rerank · diversify · logs</text>
+
+  <rect x="866" y="452" width="196" height="142" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+  <text x="964" y="474" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">support modules</text>
+  <text x="882" y="496" font-size="12" fill="#1e293b">clients.py · quality.py</text>
+  <text x="882" y="516" font-size="12" fill="#1e293b">errors.py · camofox.py</text>
+  <text x="882" y="536" font-size="12" fill="#1e293b">fetch_worker.py</text>
+  <text x="882" y="556" font-size="12" fill="#1e293b">typed errors (stage/</text>
+  <text x="882" y="573" font-size="12" fill="#1e293b">provider/url) · standalone</text>
+  <text x="882" y="590" font-size="12" fill="#1e293b">import fallback</text>
+
+  <line x1="560" y1="378" x2="560" y2="448" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="568" y="420" font-size="11.5" fill="#64748b">spawn python3 cli.py &lt;cmd&gt;</text>
+  <line x1="616" y1="524" x2="628" y2="524" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="622" y="540" font-size="10.5" fill="#64748b" text-anchor="middle">dispatch</text>
+  <line x1="850" y1="524" x2="862" y2="524" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="856" y="516" font-size="10.5" fill="#64748b" text-anchor="middle">imports</text>
+
+  <!-- external services -->
+  <rect x="40"  y="680" width="260" height="110" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.4"/>
+  <text x="170" y="702" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">Hister archive server</text>
+  <text x="54"  y="724" font-size="11.5" fill="#1e293b">CLI: hister search -f json</text>
+  <text x="54"  y="742" font-size="11.5" fill="#1e293b">API: GET /api/document</text>
+  <text x="54"  y="760" font-size="11.5" fill="#1e293b">POST /api/add · /api/add_pdf</text>
+  <text x="54"  y="778" font-size="11.5" fill="#1e293b">CSRF handshake · server-side</text>
+
+  <rect x="330" y="680" width="250" height="110" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.4"/>
+  <text x="455" y="702" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">SearXNG JSON API</text>
+  <text x="344" y="724" font-size="11.5" fill="#1e293b">GET /search?format=json</text>
+  <text x="344" y="742" font-size="11.5" fill="#1e293b">freshness → time_range</text>
+  <text x="344" y="760" font-size="11.5" fill="#1e293b">results: url/title/content</text>
+  <text x="344" y="778" font-size="11.5" fill="#1e293b">discovery only (snippets)</text>
+
+  <rect x="610" y="680" width="250" height="110" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.4"/>
+  <text x="735" y="702" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">wreq TLS-fingerprint venv</text>
+  <text x="624" y="724" font-size="11.5" fill="#1e293b">fetch_worker.py subprocess</text>
+  <text x="624" y="742" font-size="11.5" fill="#1e293b">profile rotation (Safari →</text>
+  <text x="624" y="760" font-size="11.5" fill="#1e293b">Firefox) · first 200 wins</text>
+  <text x="624" y="778" font-size="11.5" fill="#1e293b">temp html/pdf files</text>
+
+  <rect x="890" y="680" width="230" height="110" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.4"/>
+  <text x="1005" y="702" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">Camofox browser</text>
+  <text x="904" y="724" font-size="11.5" fill="#1e293b">anti-detect render, REST :9377</text>
+  <text x="904" y="742" font-size="11.5" fill="#1e293b">full-DOM output</text>
+  <text x="904" y="760" font-size="11.5" fill="#1e293b">challenge poll (25 s)</text>
+  <text x="904" y="778" font-size="11.5" fill="#1e293b">cookie injection</text>
+
+  <line x1="730" y1="640" x2="730" y2="676" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="738" y="662" font-size="11.5" fill="#64748b">HTTP + subprocess calls from core.py</text>
+  <text x="40" y="820" font-size="12" fill="#64748b">Structured logs: $WEBRESEARCH_LOGS_DIR or ~/.dsh/logs/web-research.log  ·  bundle settings also overridable per-row via profile config (see §8)</text>
+</svg>
+<p class="cap">Figure 1 — Deployment &amp; wiring: the patch row imports <code>main.js</code> into the live host; tools/seam/systemPrompt are registered against the host context; every tool call crosses the host↔subprocess boundary.</p>
+
+<div class="callout"><strong>Key boundary:</strong> the Node side never touches the web. All HTTP and subprocess work happens in
+the Python pipeline; <code>main.js</code> only resolves config, spawns <code>cli.py</code>, and relays one JSON document
+back. This keeps the plugin dependency-free on both sides (Node built-ins; Python stdlib <code>urllib</code>/<code>subprocess</code>).</div>
+</section>
+
+<!-- ================================================================== -->
+<section id="s3">
+<h2>3. Flow — what happens on a tool call</h2>
+<svg class="diagram" viewBox="0 0 1160 900" role="img" aria-label="Tool-call runtime sequence flow">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <!-- step 1 -->
+  <rect x="70"  y="40"  width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="66" r="13" fill="#6366f1"/>
+  <text x="104" y="71" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">1</text>
+  <text x="130" y="62" font-size="13.5" font-weight="600" fill="#0f172a">Agent / model invokes a tool</text>
+  <text x="130" y="79" font-size="12" fill="#334155">web_recall | web_research | web_read (built-in web_search / web_fetch via the seam, §7)</text>
+  <text x="720" y="66" font-size="12" fill="#64748b">Host validates args against the tool schema;</text>
+  <text x="720" y="83" font-size="12" fill="#64748b">tools are marked isConcurrencySafe: true.</text>
+
+  <!-- step 2 -->
+  <rect x="70"  y="124" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="150" r="13" fill="#6366f1"/>
+  <text x="104" y="155" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">2</text>
+  <text x="130" y="146" font-size="13.5" font-weight="600" fill="#0f172a">main.js  toolDefinition.execute(args, exec)</text>
+  <text x="130" y="163" font-size="12" fill="#334155">forwards only schema-declared keys (+ argMap aliases); renders output as text</text>
+  <text x="720" y="150" font-size="12" fill="#64748b">Unknown keys are silently dropped, so schema</text>
+  <text x="720" y="167" font-size="12" fill="#64748b">changes degrade gracefully on both sides.</text>
+
+  <!-- step 3 -->
+  <rect x="70"  y="208" width="600" height="52" rx="10" fill="#fefce8" stroke="#eab308" stroke-width="1.3"/>
+  <circle cx="104" cy="234" r="13" fill="#d97706"/>
+  <text x="104" y="239" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">3</text>
+  <text x="130" y="230" font-size="13.5" font-weight="600" fill="#0f172a">runPipeline(): spawn python3 python/webresearch/cli.py &lt;cmd&gt;</text>
+  <text x="130" y="247" font-size="12" fill="#334155">child env = inherited + resolved WEBRESEARCH_* values · SIGKILL on timeout (240 s) / abort</text>
+  <text x="720" y="234" font-size="12" fill="#64748b">config precedence: row config &gt; process env</text>
+  <text x="720" y="251" font-size="12" fill="#64748b">&gt; .env &gt; Python default (§8).</text>
+
+  <!-- step 4 -->
+  <rect x="70"  y="292" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="318" r="13" fill="#6366f1"/>
+  <text x="104" y="323" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">4</text>
+  <text x="130" y="314" font-size="13.5" font-weight="600" fill="#0f172a">cli.py reads one JSON object from stdin</text>
+  <text x="130" y="331" font-size="12" fill="#334155">sys.path setup → standalone imports of core/quality; kwargs filtered to the function signature</text>
+  <text x="720" y="318" font-size="12" fill="#64748b">“cli: unknown command” → exit 2. Bad stdin JSON</text>
+  <text x="720" y="335" font-size="12" fill="#64748b">→ exit 2. These are invocation errors, not results.</text>
+
+  <!-- step 5 -->
+  <rect x="70"  y="376" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="402" r="13" fill="#6366f1"/>
+  <text x="104" y="407" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">5</text>
+  <text x="130" y="398" font-size="13.5" font-weight="600" fill="#0f172a">core.py dispatches to web_recall / web_research / web_read / web_search_core</text>
+  <text x="130" y="415" font-size="12" fill="#334155">each stage retry()-bounded (exp. backoff); failures logged + surfaced in diagnostics</text>
+  <text x="720" y="402" font-size="12" fill="#64748b">Stage contract: a stage either returns a typed</text>
+  <text x="720" y="419" font-size="12" fill="#64748b">result or raises; the caller retries/falls back.</text>
+
+  <!-- step 6 -->
+  <rect x="70"  y="460" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="486" r="13" fill="#6366f1"/>
+  <text x="104" y="491" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">6</text>
+  <text x="130" y="482" font-size="13.5" font-weight="600" fill="#0f172a">Backends do the real work</text>
+  <text x="130" y="499" font-size="12" fill="#334155">Hister CLI + API (recall/ingest/read) · SearXNG HTTP · wreq venv subprocess · Camofox REST (§5)</text>
+  <text x="720" y="486" font-size="12" fill="#64748b">All fetch paths end by writing raw HTML/PDF into</text>
+  <text x="720" y="503" font-size="12" fill="#64748b">Hister, then re-reading clean text from it.</text>
+
+  <!-- step 7 -->
+  <rect x="70"  y="544" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="570" r="13" fill="#6366f1"/>
+  <text x="104" y="575" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">7</text>
+  <text x="130" y="566" font-size="13.5" font-weight="600" fill="#0f172a">cli.py writes one JSON document to stdout · exit 0</text>
+  <text x="130" y="583" font-size="12" fill="#334155">exit 0 means “the pipeline ran” — even when the document carries an error field inside</text>
+  <text x="720" y="570" font-size="12" fill="#64748b">Rows: {results|error, diagnostics} or seam-shaped</text>
+  <text x="720" y="587" font-size="12" fill="#64748b">JSON for search_meta / refresh_doc.</text>
+
+  <!-- step 8 -->
+  <rect x="70"  y="628" width="600" height="52" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <circle cx="104" cy="654" r="13" fill="#6366f1"/>
+  <text x="104" y="659" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">8</text>
+  <text x="130" y="650" font-size="13.5" font-weight="600" fill="#0f172a">main.js validates stdout as JSON</text>
+  <text x="130" y="667" font-size="12" fill="#334155">rc ≠ 0 or non-JSON → reject (first 600 chars of stderr in the message)</text>
+  <text x="720" y="654" font-size="12" fill="#64748b">Timeout kills the child with SIGKILL; the abort</text>
+  <text x="720" y="671" font-size="12" fill="#64748b">signal is wired to the same kill path.</text>
+
+  <!-- step 9 -->
+  <rect x="70"  y="712" width="600" height="52" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.3"/>
+  <circle cx="104" cy="738" r="13" fill="#059669"/>
+  <text x="104" y="743" text-anchor="middle" font-weight="700" font-size="13" fill="#fff">9</text>
+  <text x="130" y="734" font-size="13.5" font-weight="600" fill="#0f172a">Agent receives the JSON document as the tool result</text>
+  <text x="130" y="751" font-size="12" fill="#334155">{results:[{url,title,text,retrieved_at,…}], diagnostics:{…}}  or  {error, diagnostics}</text>
+  <text x="720" y="738" font-size="12" fill="#64748b">The same document is already appended to</text>
+  <text x="720" y="755" font-size="12" fill="#64748b">web-research.log for auditing and debugging.</text>
+
+  <line x1="370" y1="92"  x2="370" y2="120" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="176" x2="370" y2="204" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="260" x2="370" y2="288" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="344" x2="370" y2="372" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="428" x2="370" y2="456" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="512" x2="370" y2="540" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="596" x2="370" y2="624" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="370" y1="680" x2="370" y2="708" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <!-- notes column backdrop + connector stubs -->
+  <rect x="704" y="40" width="410" height="764" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <line x1="676" y1="52"  x2="702" y2="52"  stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="136" x2="702" y2="136" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="220" x2="702" y2="220" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="304" x2="702" y2="304" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="388" x2="702" y2="388" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="472" x2="702" y2="472" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="556" x2="702" y2="556" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="640" x2="702" y2="640" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="676" y1="724" x2="702" y2="724" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+</svg>
+<p class="cap">Figure 2 — One tool call, from agent to result. Steps 3–8 are the host↔subprocess boundary that the whole plugin is built around.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="s4">
+<h2>4. Flow — the web_research stage pipeline</h2>
+<p><code>web_research</code> is the flagship tool. It combines both discovery engines, classifies results by cache state,
+re-fetches the newest content through the fetch layer, and only then serves text — never raw search-engine snippets.</p>
+<svg class="diagram" viewBox="0 0 1160 1070" role="img" aria-label="web_research stage pipeline diagram">
+  <defs>
+    <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <!-- stage 0 -->
+  <rect x="330" y="30" width="520" height="56" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.4"/>
+  <text x="590" y="53" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">web_research(query, fetch_top=3, limit=10, rerank=false, freshness?)</text>
+  <text x="590" y="73" text-anchor="middle" font-size="11.5" fill="#334155">freshness: day | week | month | year → SearXNG time_range when valid</text>
+
+  <!-- stage 1 -->
+  <rect x="70"  y="130" width="480" height="74" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="310" y="152" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">1 · SearXNG live search   (parallel)</text>
+  <text x="310" y="172" text-anchor="middle" font-size="12" fill="#334155">GET /search?format=json · url/title/content</text>
+  <text x="310" y="190" text-anchor="middle" font-size="12" fill="#334155">retry ×2 · failure never aborts the tool</text>
+
+  <rect x="620" y="130" width="480" height="74" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="860" y="152" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">1 · Hister recall  (parallel)</text>
+  <text x="860" y="172" text-anchor="middle" font-size="12" fill="#334155">hister search CLI · -F id,url,title,domain,type</text>
+  <text x="860" y="190" text-anchor="middle" font-size="12" fill="#334155">retry ×2 · raw /search HTTP 500s, so CLI is used</text>
+
+  <line x1="560" y1="86" x2="310" y2="126" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+  <line x1="620" y1="86" x2="860" y2="126" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- stage 2 -->
+  <rect x="70" y="260" width="1020" height="66" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="580" y="282" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">2 · Union, dedupe by URL, spam/mirror filter</text>
+  <text x="580" y="303" text-anchor="middle" font-size="12" fill="#334155">quality.filter_spam(): blocklist seed + WEBRESEARCH_BLOCKED_DOMAINS · allowlist always wins · site: queries bypass</text>
+  <text x="580" y="319" text-anchor="middle" font-size="11.5" fill="#64748b">if both engines returned nothing → error document immediately</text>
+  <line x1="310" y1="204" x2="310" y2="256" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+  <line x1="860" y1="204" x2="860" y2="256" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- stage 3 -->
+  <rect x="70" y="380" width="1020" height="132" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="580" y="402" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">3 · Cache-first classification (per Hister recall hit)</text>
+  <text x="440" y="426" text-anchor="end" font-size="12.5" fill="#1e293b">▸ cached ∧ fresh (≤ refreshMaxDays, default 10) ∧ not a shell →</text>
+  <text x="456" y="426" font-size="12.5" font-weight="700" fill="#059669">results[url] = {source: “cache”}</text>
+  <text x="440" y="448" text-anchor="end" font-size="12.5" fill="#1e293b">▸ cached but stale (older than max age) or cached shell text →</text>
+  <text x="456" y="448" font-size="12.5" font-weight="700" fill="#d97706">refresh queue (priority)</text>
+  <text x="440" y="470" text-anchor="end" font-size="12.5" fill="#1e293b">▸ SearXNG-only URLs (never cached) →</text>
+  <text x="456" y="470" font-size="12.5" font-weight="700" fill="#d97706">refresh queue (bounded)</text>
+  <text x="580" y="494" text-anchor="middle" font-size="11.5" fill="#64748b">refreshMaxDays = 0 → never serve from cache (re-fetch everything) · unknown cache age → treated fresh but logged loudly</text>
+  <line x1="580" y1="326" x2="580" y2="376" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- stage 4 -->
+  <rect x="70" y="566" width="1020" height="160" rx="10" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.4"/>
+  <text x="580" y="588" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">4 · Refresh loop — pending queue (stale first), bounded by fetch_top</text>
+  <text x="90" y="612" font-size="12.5" fill="#1e293b">per URL: _refresh_doc(url) → fetch_html: wreq (profile rotation) → camofox browser fallback  (§5)</text>
+  <text x="90" y="634" font-size="12.5" fill="#1e293b">ingest: POST /api/add (CSRF handshake) · POST /api/add_pdf for PDFs (raw bytes, base64)</text>
+  <text x="90" y="656" font-size="12.5" fill="#1e293b">re-read: GET /api/document → clean extracted text · failure-shell check each iteration</text>
+  <text x="90" y="678" font-size="12.5" fill="#1e293b">wreq text is a shell + camofox enabled → re-render in the browser, re-ingest, re-read</text>
+  <text x="90" y="702" font-size="12" fill="#64748b">failure policy: stale hit falls back to its old cached text (source: “cache-stale”); a brand-new URL that fails is dropped with a diagnostic</text>
+  <path d="M 1090 640 q 28 0 28 -14 q 0 -14 -28 -14" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+  <text x="1098" y="610" font-size="10.5" fill="#64748b" text-anchor="middle" transform="rotate(-90 1098 610)">loop</text>
+  <line x1="580" y1="512" x2="580" y2="562" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- stage 5 -->
+  <rect x="70" y="780" width="1020" height="66" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="580" y="802" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">5 · Assemble results set</text>
+  <text x="580" y="823" text-anchor="middle" font-size="12" fill="#334155">source ∈ cache | fresh | updated | cache-stale · counters: searxng, hister, cached, fetched, ingested, stale_refreshed</text>
+  <text x="580" y="839" text-anchor="middle" font-size="11.5" fill="#64748b">results keep the Hister recall order first, then fetched entries</text>
+  <line x1="580" y1="726" x2="580" y2="776" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- stage 6 -->
+  <rect x="70" y="900" width="1020" height="66" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="580" y="922" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">6 · Optional rerank → diversify</text>
+  <text x="580" y="943" text-anchor="middle" font-size="12" fill="#334155">rerank=true + endpoint configured → RerankClient /v1/rerank (docs truncated to 4000 chars, llama.cpp batch cap) · rerank failure never fails the tool</text>
+  <text x="580" y="959" text-anchor="middle" font-size="11.5" fill="#64748b">diversify: ≤ 2 results per registrable domain; overflow moved behind the diverse head, never dropped</text>
+  <line x1="580" y1="846" x2="580" y2="896" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+
+  <!-- output -->
+  <rect x="200" y="1016" width="760" height="54" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.4"/>
+  <text x="580" y="1038" text-anchor="middle" font-weight="700" font-size="13" fill="#0f172a">JSON document → { results:[{url,title,text,source,retrieved_at}], diagnostics:{…} }</text>
+  <text x="580" y="1058" text-anchor="middle" font-size="11.5" fill="#334155">diagnostics: searxng · hister · cached · fetched · ingested · failed[] · reranked · diversity_overflow · elapsed_s</text>
+  <line x1="580" y1="966" x2="580" y2="1012" stroke="#475569" stroke-width="1.6" marker-end="url(#ar3)"/>
+</svg>
+<p class="cap">Figure 3 — The six stages of <code>web_research</code>. Stage 4 is the only place new bytes enter the system; everything else reads from the Hister archive.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="s5">
+<h2>5. Flow — the fetch layer: wreq → Camofox fallback &amp; shell escalation</h2>
+<p>Every byte that enters the system walks <code>fetch_html()</code> (raw retrieval) and <code>_refresh_doc()</code>
+(fetch + ingest + re-read + quality gate). This is the single choke point shared by <code>web_research</code>,
+<code>web_read</code>, and the <code>refresh_doc</code> seam command.</p>
+<svg class="diagram" viewBox="0 0 1160 730" role="img" aria-label="Fetch layer fallback chain diagram">
+  <defs>
+    <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <!-- row 1: wreq -->
+  <rect x="60" y="40" width="300" height="120" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="210" y="64" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">fetch_html(url)</text>
+  <text x="78"  y="88" font-size="12.5" fill="#1e293b">1 · wreq venv subprocess</text>
+  <text x="78"  y="108" font-size="12.5" fill="#1e293b">   python fetch_worker.py</text>
+  <text x="78"  y="128" font-size="12.5" fill="#1e293b">   --url URL --out workdir</text>
+  <text x="78"  y="148" font-size="12" fill="#64748b">requires WEBRESEARCH_WREQ_PY</text>
+
+  <rect x="420" y="40" width="280" height="120" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="560" y="64" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">fetch_worker.py — fingerprint rotation</text>
+  <text x="560" y="88" text-anchor="middle" font-size="12.5" fill="#1e293b">Safari18_5 → Safari26 →</text>
+  <text x="560" y="106" text-anchor="middle" font-size="12.5" fill="#1e293b">Chrome131 → Firefox150</text>
+  <text x="560" y="126" text-anchor="middle" font-size="12.5" fill="#1e293b">first HTTP 200 wins</text>
+  <text x="560" y="148" text-anchor="middle" font-size="12" fill="#64748b">body → temp file, never stdout</text>
+
+  <rect x="790" y="40" width="200" height="56" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.2"/>
+  <text x="890" y="62" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">text/html</text>
+  <text x="890" y="82" text-anchor="middle" font-size="11.5" fill="#334155">→ html_path (UTF-8)</text>
+
+  <rect x="790" y="120" width="200" height="56" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.2"/>
+  <text x="890" y="142" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">application/pdf</text>
+  <text x="890" y="162" text-anchor="middle" font-size="11.5" fill="#334155">→ pdf_path (raw bytes)</text>
+
+  <line x1="360" y1="100" x2="416" y2="100" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <line x1="700" y1="68"  x2="786" y2="68"  stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <line x1="700" y1="132" x2="786" y2="148" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <text x="716" y="60" font-size="11" fill="#64748b">200</text>
+  <text x="716" y="126" font-size="11" fill="#64748b">200</text>
+
+  <!-- row 2: camofox + failure outcomes -->
+  <rect x="60" y="250" width="500" height="110" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.3"/>
+  <text x="310" y="274" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">Camofox fallback — when wreq fails or its text is unusable</text>
+  <text x="78"  y="298" font-size="12.5" fill="#1e293b">CamofoxClient.render(url): create tab → inject cookies (Netscape</text>
+  <text x="78"  y="318" font-size="12.5" fill="#1e293b">file) → navigate → wait-for-network → poll DOM until the challenge</text>
+  <text x="78"  y="338" font-size="12.5" fill="#1e293b">clears (≤ 25 s) → read outerHTML in 768 KiB slices (bypasses the</text>
+  <text x="78"  y="358" font-size="12" fill="#64748b">1 MiB evaluate cap). Gate: WEBRESEARCH_CAMOFOX_FALLBACK=true</text>
+
+  <rect x="620" y="250" width="480" height="110" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="860" y="274" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">Failure outcomes (errors.py taxonomy)</text>
+  <text x="640" y="290" font-size="12.5" fill="#1e293b">▸ wreq failed + fallback off  → RuntimeError</text>
+  <text x="640" y="310" font-size="12.5" fill="#1e293b">▸ camofox challenge persists  → ManagedChallengeError</text>
+  <text x="640" y="330" font-size="12.5" fill="#1e293b">   (user must act)</text>
+  <text x="640" y="348" font-size="12.5" fill="#1e293b">▸ both layers failed          → RuntimeError (both failed)</text>
+
+  <line x1="580" y1="160" x2="290" y2="246" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <text x="435" y="192" text-anchor="middle" font-size="11.5" fill="#64748b">non-200 / exception → browser fallback</text>
+
+  <!-- row 3: ingest + gate -->
+  <rect x="60" y="430" width="540" height="130" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="330" y="454" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">_refresh_doc(url) — ingest + re-read</text>
+  <text x="78"  y="478" font-size="12.5" fill="#1e293b">POST /api/add after CSRF handshake (GET /api/config</text>
+  <text x="78"  y="498" font-size="12.5" fill="#1e293b">→ X-Csrf-Token, same cookie jar) · PDFs: /api/add_pdf</text>
+  <text x="78"  y="518" font-size="12.5" fill="#1e293b">with base64 bytes → then GET /api/document → clean text</text>
+  <text x="78"  y="540" font-size="12" fill="#64748b">text extraction is server-side (Hister)</text>
+
+  <rect x="640" y="430" width="460" height="130" rx="10" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+  <text x="870" y="454" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">failure-shell gate  (_looks_like_failure)</text>
+  <text x="658" y="478" font-size="12.5" fill="#1e293b">empty / &lt; 40 chars / JS-required, cookie-wall,</text>
+  <text x="658" y="498" font-size="12.5" fill="#1e293b">“just a moment”, access-denied markers…</text>
+  <text x="658" y="520" font-size="12.5" fill="#1e293b">wreq shell + camofox on → re-render, re-ingest,</text>
+  <text x="658" y="540" font-size="12.5" fill="#1e293b">re-read · still a shell → keep wreq text (logged)</text>
+  <text x="658" y="560" font-size="12" fill="#64748b">catches HTTP-200 shells like nature.com</text>
+
+  <!-- feed arrows: wreq html/pdf + camofox → ingest (R1) -->
+  <path d="M 925 92 v 108 h -335 v 226" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <path d="M 925 168 v 32" fill="none" stroke="#475569" stroke-width="1.6"/>
+  <text x="750" y="192" text-anchor="middle" font-size="11.5" fill="#64748b">fetched html / pdf (wreq or camofox) →</text>
+
+  <line x1="310" y1="360" x2="310" y2="426" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+
+  <line x1="600" y1="495" x2="636" y2="495" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <text x="618" y="486" text-anchor="middle" font-size="11" fill="#64748b">clean text → shell gate</text>
+
+  <!-- output -->
+  <rect x="340" y="620" width="500" height="50" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.4"/>
+  <text x="590" y="641" text-anchor="middle" font-weight="700" font-size="13" fill="#0f172a">return { text, source: “wreq” | “camofox”, kind: “html” | “pdf” }</text>
+  <text x="590" y="660" text-anchor="middle" font-size="11.5" fill="#334155">PDFs never go through the camofox escalation (not a JS-render shell)</text>
+  <line x1="310" y1="560" x2="410" y2="616" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+  <line x1="860" y1="560" x2="800" y2="616" stroke="#475569" stroke-width="1.6" marker-end="url(#ar4)"/>
+</svg>
+<p class="cap">Figure 4 — The single ingest choke point: wreq fetches with fingerprint rotation, Camofox renders when needed, every result is ingested and re-read from Hister, and shell-like text is never served or cached as content.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="s6">
+<h2>6. Flow — web_read and web_recall (the simpler tools)</h2>
+<svg class="diagram" viewBox="0 0 1160 430" role="img" aria-label="web_read and web_recall flows">
+  <defs>
+    <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <!-- web_read -->
+  <rect x="60" y="40" width="330" height="96" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="225" y="64" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">web_read(url, refresh=false)</text>
+  <text x="80" y="88" font-size="12.5" fill="#1e293b">cache-first: GET /api/document</text>
+  <text x="80" y="108" font-size="12.5" fill="#1e293b">(unless refresh=true)</text>
+  <text x="80" y="128" font-size="12" fill="#64748b">retry ×2 on the document read</text>
+
+  <rect x="450" y="40" width="360" height="96" rx="10" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+  <text x="630" y="64" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">cached ∧ fresh (≤ max age) ∧ not a shell?</text>
+  <text x="630" y="88" text-anchor="middle" font-size="12.5" font-weight="700" fill="#059669">yes → serve cache</text>
+  <text x="630" y="108" text-anchor="middle" font-size="12" fill="#334155">{url, text, retrieved_at, source:“cache”}</text>
+  <text x="630" y="126" text-anchor="middle" font-size="11.5" fill="#64748b">cached shell text → treated as miss (re-fetch)</text>
+
+  <rect x="890" y="40" width="210" height="96" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+  <text x="995" y="64" text-anchor="middle" font-weight="700" font-size="13.5" fill="#0f172a">no → _refresh_doc(url)</text>
+  <text x="995" y="88" text-anchor="middle" font-size="12.5" fill="#1e293b">full fetch → ingest → re-read</text>
+  <text x="995" y="106" text-anchor="middle" font-size="12.5" fill="#1e293b">(Figure 4 path)</text>
+  <text x="995" y="126" text-anchor="middle" font-size="12" fill="#64748b">failure → {error, diagnostics}</text>
+
+  <line x1="390" y1="88" x2="446" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar5)"/>
+  <line x1="810" y1="88" x2="886" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar5)"/>
+  <text x="824" y="80" font-size="11" fill="#64748b">no</text>
+
+  <!-- web_recall -->
+  <rect x="60" y="240" width="1040" height="120" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.3"/>
+  <text x="580" y="264" text-anchor="middle" font-weight="700" font-size="14" fill="#0f172a">web_recall(query, limit=10) — cache-only search, zero live crawling</text>
+  <text x="80" y="290" font-size="12.5" fill="#1e293b">hister search CLI (best-effort):  -F id,url,title,domain,type -f json -L limit   →   hits(limit)</text>
+  <text x="80" y="312" font-size="12.5" fill="#1e293b">per hit: GET /api/document → clean text  (empty text counts as a failure, skip the row)</text>
+  <text x="80" y="334" font-size="12.5" fill="#1e293b">→ { results:[{url,title,text,retrieved_at}], diagnostics:{source,searched,succeeded,failed,failures[]} }</text>
+  <text x="80" y="354" font-size="12" fill="#64748b">Failure isolation: per-hit try/except; one bad document never aborts the whole recall. Used as a cheap pre-check and as the search_meta seam’s primary source.</text>
+</svg>
+<p class="cap">Figure 5 — <code>web_read</code>: cache-first with a freshness and shell gate, falling back to the full ingest path. <code>web_recall</code>: Hister-only, fully fault-isolated per hit.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="s7">
+<h2>7. Flow — the ctx.web seam (built-in web_search / web_fetch routing)</h2>
+<div class="card">
+<p>Setting <code>registerWebBackend: true</code> (already set in <code>cordis.patch.yml</code>) registers two providers into the
+host’s <code>ctx.web</code> service, so the <em>built-in</em> <code>web_search</code>/<code>web_fetch</code> tools can be
+routed onto the same local pipeline:</p>
+<table>
+  <tr><th>Provider</th><th>Seam command</th><th>Contract</th><th>Notes</th></tr>
+  <tr>
+    <td><code>web-research-search</code></td>
+    <td><code>search_meta</code></td>
+    <td>Hister recall first, topped up with SearXNG results (url/title/snippet, no page bodies); returns
+    <code>{sources:[{url,title,snippet}], truncated:false}</code></td>
+    <td><code>available()</code> is <code>false</code> unless <code>histerUrl</code> + <code>histerToken</code> resolve, so
+    leaving the flag on is harmless when the pipeline is unconfigured. Max 300 chars per snippet.</td>
+  </tr>
+  <tr>
+    <td><code>web-research-extract</code></td>
+    <td><code>refresh_doc</code></td>
+    <td>One URL through the full fetch → ingest → clean-text path; returns
+    <code>{url, statusCode:200, body:{kind:"text",content}, truncated:false}</code></td>
+    <td>Errors are raised as <code>HarnessError</code> with code <code>WEB_PROVIDER_ERROR</code> so the harness can route
+    them; the profile <code>web</code> row must name <code>fetchProvider</code> explicitly when another fetch provider is also installed (the seam rejects ambiguous auto-selection).</td>
+  </tr>
+</table>
+<p class="cap">Routing choice for the built-in tools (profile-level patch, higher priority than the bundle layer):</p>
+<div class="flowline">
+  <span class="node">web row (dsh-web)</span><span class="arrow">config</span>
+  <span class="node">searchProvider: web-research-search</span><span class="arrow">·</span>
+  <span class="node">fetchProvider: web-research-extract</span>
+</div>
+</div>
+</section>
+
+<!-- ================================================================== -->
+<section id="s8">
+<h2>8. Configuration &amp; precedence</h2>
+<div class="card">
+<p>Every backend setting keeps its Hermes <code>WEBRESEARCH_*</code> / <code>CAMOFOX_*</code> environment-variable contract. Per field, resolution order is:</p>
+<div class="flowline">
+  <span class="node">row config (profile patch)</span>
+  <span class="arrow">→</span>
+  <span class="node">process env</span>
+  <span class="arrow">→</span>
+  <span class="node env">bundleDir/.env</span>
+  <span class="arrow">→</span>
+  <span class="node py">Python default</span>
+</div>
+<p>Empty strings are skipped, so only the values your setup needs are required. <code>.env</code> is loaded by
+<a href="#s2"><code>loadDotEnv()</code></a> at startup (override the location with <code>DSH_WEBRESEARCH_ENV_FILE</code>);
+existing process- environment values always win over <code>.env</code>; row <code>config</code> wins over both.</p>
+<table>
+  <tr><th>Key (row config)</th><th>Env variable</th><th>Used for</th></tr>
+  <tr><td><code>histerUrl</code> / <code>histerToken</code> / <code>histerBin</code></td><td><code>WEBRESEARCH_HISTER_URL/TOKEN/BIN</code></td><td>Recall, ingest, document reads; also gates <code>available()</code> on the seam and <code>pipelineConfigured()</code> for registration.</td></tr>
+  <tr><td><code>searxngUrl</code></td><td><code>WEBRESEARCH_SEARXNG_URL</code></td><td>Live discovery in <code>web_research</code>/<code>search</code>/<code>search_meta</code>.</td></tr>
+  <tr><td><code>wreqPython</code> / <code>workDir</code></td><td><code>WEBRESEARCH_WREQ_PY</code> / <code>WEBRESEARCH_WORK_DIR</code></td><td>Subprocess interpreter for <code>fetch_worker.py</code> and its temp-file directory.</td></tr>
+  <tr><td><code>camofoxUrl</code>/<code>camofoxApiKey</code>/<code>camofoxFallback</code>/<code>cookiesFile</code></td><td><code>CAMOFOX_URL</code>/<code>CAMOFOX_API_KEY</code>, <code>WEBRESEARCH_CAMOFOX_FALLBACK</code>, <code>WEBRESEARCH_COOKIES_FILE</code></td><td>Browser-render fallback and cookie injection.</td></tr>
+  <tr><td><code>refreshMaxDays</code></td><td><code>WEBRESEARCH_REFRESH_MAX_DAYS</code></td><td>Cache freshness window (default 10 days; 0 = never serve cache).</td></tr>
+  <tr><td><code>rerankUrl/Model/Token/MaxChars</code>, <code>searchTextChars</code></td><td><code>WEBRESEARCH_RERANK_*</code>, <code>WEBRESEARCH_SEARCH_TEXT_CHARS</code></td><td>Optional local rerank (4000 chars/doc default) and web_search text budget (default 6000).</td></tr>
+  <tr><td><code>blockedDomains</code>/<code>allowedDomains</code></td><td><code>WEBRESEARCH_BLOCKED/ALLOWED_DOMAINS</code></td><td>Spam/mirror filtering; allowlist always wins.</td></tr>
+  <tr><td><code>label</code>, <code>logsDir</code>, <code>pythonBin</code>, <code>toolTimeoutMs</code>, <code>registerWebBackend</code></td><td><code>WEBRESEARCH_LABEL</code>, <code>WEBRESEARCH_LOGS_DIR</code>, <code>DSH_WEBRESEARCH_PYTHON_BIN</code>, —, —</td><td>Ingest label, log destination, interpreter (default <code>python3</code>), subprocess timeout (default 240 s), seam registration flag.</td></tr>
+</table>
+</div>
+</section>
+
+<!-- ================================================================== -->
+<section id="s9">
+<h2>9. Data contracts</h2>
+<div class="kbd-row">
+  <div class="kbd"><b>stdin (host → pipeline)</b><span>One JSON object per call, e.g. <code>{"query":"…","fetch_top":3,"limit":10}</code>. cli.py forwards only keys the target function accepts (schema additions degrade gracefully).</span></div>
+  <div class="kbd"><b>stdout (pipeline → host)</b><span>One JSON document: <code>{results:[…], diagnostics:{…}}</code> or <code>{error, diagnostics}</code>, or the seam shapes for <code>search_meta</code>/<code>refresh_doc</code>. Valid JSON + exit 0 → tool result, even when it contains an <code>error</code>.</span></div>
+  <div class="kbd"><b>Exit codes</b><span><code>0</code> pipeline ran; <code>1</code> invocation-level error; <code>2</code> unknown command or bad stdin args. Nonzero → the host rejects with the first 600 chars of stderr.</span></div>
+</div>
+<div class="kbd-row">
+  <div class="kbd"><b>Result rows</b><span><code>{url, title, text, source?, retrieved_at?}</code> — text is always clean text re-read from Hister. <code>source</code> ∈ cache | fresh | updated | cache-stale (web_research), or wreq | camofox (refresh_doc).</span></div>
+  <div class="kbd"><b>diagnostics</b><span>Per-source counts (<code>searxng, hister, cached, fetched, ingested</code>), <code>failed[]</code> with stage/url/reason, <code>spam_filtered</code>, <code>reranked</code>, <code>diversity_overflow</code>, <code>elapsed_s</code>, freshness mapping.</span></div>
+  <div class="kbd"><b>Logs</b><span>Structured lines to <code>$WEBRESEARCH_LOGS_DIR</code> or <code>~/.dsh/logs/web-research.log</code> — every stage, retry, fallback, and failure with timestamps.</span></div>
+</div>
+</section>
+
+<!-- ================================================================== -->
+<section id="s10">
+<h2>10. Failure handling &amp; quality gates (the design spine)</h2>
+<div class="card">
+<h3>Resilience rules</h3>
+<ul class="tight">
+  <li><strong>Stage contract:</strong> a stage returns a typed result or raises — it never silently returns empty. The caller owns retry/fallback/logging.</li>
+  <li><strong>Bounded retries everywhere:</strong> <code>retry()</code> with exponential backoff (2 attempts for searches/fetches/ingests, 3 for document reads); <code>RetryExhausted</code> for loops.</li>
+  <li><strong>Parallel discovery with isolation:</strong> SearXNG failure or Hister failure never aborts <code>web_research</code> — each is reported in <code>diagnostics.failed[]</code>.</li>
+  <li><strong>Per-hit isolation in recall:</strong> one broken document doesn’t sink the whole <code>web_recall</code>.</li>
+  <li><strong>Stale-doc grace:</strong> an <em>old cached copy</em> is better than nothing — stale hits that fail re-fetch fall back to <code>source:"cache-stale"</code>; brand-new URLs just get dropped with a diagnostic.</li>
+  <li><strong>Never cache or serve a failure shell:</strong> <code>_looks_like_failure()</code> rejects short/empty/JS-required/cookie-wall text at classification time, after wreq, and after camofox; a cached shell is force-refreshed.</li>
+  <li><strong>Toolbounding:</strong> subprocess timeout 240 s with <code>SIGKILL</code>, abort-signal wiring, JSON validation on stdout. A poisoned page can’t hang the agent.</li>
+</ul>
+
+<h3>Quality gates</h3>
+<ul class="tight">
+  <li><strong>Spam/mirror filter</strong> (<code>filter_spam</code>): registrable-domain eTLD+1 heuristic (stdlib-only, no publicsuffix dep); seed blocklist of Stack Overflow mirrors + SEO-scraper farms; operator <code>WEBRESEARCH_BLOCKED_DOMAINS</code> extends; <code>WEBRESEARCH_ALLOWED_DOMAINS</code> always wins; explicit <code>site:</code> or <code>include_domains</code> queries bypass both (a constrained search is already deliberate).</li>
+  <li><strong>Diversification</strong> (<code>diversify</code>): ≤ 2 rows per registrable domain, overflow moved behind the diverse head in first-seen order — results are capped, never truncated.</li>
+  <li><strong>Citable-text policy:</strong> only Hister-derived clean text is returned with a <code>text</code> field; search-engine snippets are discovery hints only (and <code>web_search_core</code> tells the agent to answer only from entries carrying <code>text</code>).</li>
+  <li><strong>Optional rerank</strong> that “never fails the tool”: unconfigured or broken rerank endpoints are logged and bypassed.</li>
+</ul>
+</div>
+</section>
+
+<!-- ================================================================== -->
+<section id="s11">
+<h2>11. End-to-end narrative — one research question</h2>
+<div class="card">
+<p>Concrete walk-through of everything touching at runtime. Say the agent needs recent information on a topic:</p>
+<ol class="tight">
+  <li>The agent calls <code>web_research(query, fetch_top=3, limit=10)</code>. Host validates args; <code>main.js</code> builds the child env from config precedence and spawns <code>python3 …/cli.py research</code>, writing the args JSON to stdin (Figure 2).</li>
+  <li>In parallel, <code>core.py</code> queries SearXNG (live discovery) and Hister (cached recall), applies the spam filter to the live feed, then unions and dedupes by URL (Figure 3, stages 1–2).</li>
+  <li>Each recalled URL is classified against cache freshness: fresh hits are served straight from <code>/api/document</code>; stale hits and uncached URLs form a bounded refresh queue, stale first (stage 3).</li>
+  <li>Up to <code>fetch_top</code> URLs go through <code>_refresh_doc()</code>: <code>fetch_html()</code> tries the wreq venv with fingerprint rotation (PDFs take the raw-bytes path), falls back to a Camofox browser render, ingests the HTML/PDF into Hister (CSRF handshake for <code>/api/add</code>), re-reads clean text, and runs the failure-shell gate — escalating to a browser render when wreq’s cleaned text looks like a JS-required shell (Figures 4–5).</li>
+  <li>Results accumulate with provenance (<code>cache | fresh | updated | cache-stale</code>); the optional reranker reorders by relevance; diversification caps domain repetition; the JSON document (results + diagnostics) lands on stdout.</li>
+  <li><code>main.js</code> parses it, returns it to the agent, and the same document is logged to <code>~/.dsh/logs/web-research.log</code>. The next time any tool asks about the same pages, they are served from the Hister archive — the pipeline got cheaper and more private with use.</li>
+</ol>
+<p class="cap">The same choreography, minus the live-search stages, is what <code>web_read</code> (single URL, cache-first) and <code>web_recall</code>
+(cache-only) run; and the whole thing is reachable from the built-in <code>web_search</code>/<code>web_fetch</code> tools through the
+<code>ctx.web</code> seam providers when the profile points the <code>web</code> row at them (§7).</p>
+</div>
+</section>
+
+<footer>
+  Generated from exploration of the <code>dsh-web-research</code> repository · commit <code>7dbefe3</code> · no external assets in this file (all diagrams are inline SVG).
+</footer>
+
+</div>
+</body>
+</html>
